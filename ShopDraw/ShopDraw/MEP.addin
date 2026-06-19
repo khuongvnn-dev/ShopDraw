@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+	<AddIn Type="Application">
+		<Name>ShopDraw</Name>
+		<Assembly>ShopDraw.dll</Assembly>
+		<AddInId>F8A5C26B-6E5D-4A9D-8A34-2C9E7A64EED3</AddInId>
+		<FullClassName>ShopDraw.MepZoneApplication</FullClassName>
+		<VendorId>KieranFn</VendorId>
+		<VendorDescription>KieranFn</VendorDescription>
+	</AddIn>
+</RevitAddIns>
