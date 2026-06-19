@@ -11,7 +11,7 @@ namespace ShopDraw
 
         public Result OnShutdown(UIControlledApplication application)
         {
-            throw new NotImplementedException();
+            return Result.Succeeded;
         }
 
         public Result OnStartup(UIControlledApplication application)
