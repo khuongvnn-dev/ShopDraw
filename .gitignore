@@ -57,3 +57,4 @@ TestResult.xml
 nunit-*.xml
 /ShopDraw/Outcome
 /ShopDraw/.vs/ShopDraw.slnx
+*.user
