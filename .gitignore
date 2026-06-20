@@ -58,3 +58,4 @@ nunit-*.xml
 /ShopDraw/Outcome
 /ShopDraw/.vs/ShopDraw.slnx
 *.user
+/ShopDraw/ShopDraw/.vs
