@@ -96,10 +96,12 @@ namespace ShopDraw.Actions.Helpers
         {
             var model = new MepSystemModel
             {
+                Levels = new List<LevelModel>(),
                 Curves = new List<CurveModel>(),
                 Fittings = new List<FittingModel>()
             };
 
+            var uniqueLevels = new Dictionary<string, LevelModel>();
             int total = elements.Count;
             foreach (var element in elements)
             {
@@ -111,6 +113,17 @@ namespace ShopDraw.Actions.Helpers
 
                 progressBar.Update(total, "Extracting 3D data...", false);
 
+                Level elementLevel = element.Document.GetElement(element.LevelId) as Level;
+                if (elementLevel != null && !uniqueLevels.ContainsKey(elementLevel.Id.ToString()))
+                {
+                    uniqueLevels.Add(elementLevel.Id.ToString(), new LevelModel
+                    {
+                        Id = elementLevel.Id.ToString(),
+                        LevelName = elementLevel.Name,
+                        Elevation = elementLevel.Elevation
+                    });
+                }
+
                 if (element is MEPCurve mepCurve)
                 {
                     var typeEl = element.Document.GetElement(element.GetTypeId()) as ElementType;
@@ -119,8 +132,7 @@ namespace ShopDraw.Actions.Helpers
                         Id = element.Id.ToString(),
                         TypeName = typeEl?.Name,
                         FamilyName = element.Category?.Name, // Ống hệ thống không có FamilyName chuẩn như Fitting, ta dùng Category Name
-                        Diameter = (element as Pipe)?.Diameter ?? 0, // Ép kiểu an toàn lấy đường kính
-                        Connectors = GetConnectorsData(mepCurve.ConnectorManager, element.Id)
+                        LevelName = elementLevel?.Name // Gán thông tin LevelName
                     };
                     model.Curves.Add(curveModel);
                 }
@@ -134,15 +146,18 @@ namespace ShopDraw.Actions.Helpers
                         Id = element.Id.ToString(),
                         TypeName = typeEl?.Name,
                         FamilyName = fi.Symbol?.Family?.Name,
+                        LevelName = elementLevel?.Name,
                         // Chuyển đổi tọa độ XYZ sang RvtXYZ của bạn
                         Origin = new RvtXYZ(transform.Origin),
                         BasisX = new RvtXYZ(transform.BasisX),
                         BasisY = new RvtXYZ(transform.BasisY),
-                        BasisZ = new RvtXYZ(transform.BasisZ)
+                        BasisZ = new RvtXYZ(transform.BasisZ),
+                        Connectors = GetConnectorsData(fi.MEPModel?.ConnectorManager, element.Id)
                     };
                     model.Fittings.Add(fittingModel);
                 }
             }
+            model.Levels = uniqueLevels.Values.ToList();
             return model;
         }
 
@@ -153,10 +168,21 @@ namespace ShopDraw.Actions.Helpers
 
             foreach (Connector conn in cm.Connectors)
             {
-                var model = new ConnectorModel
+                var model = new ConnectorModel();
+
+                // Kiểm tra hình dáng của Connector để gán thông số kích thước phù hợp
+                switch (conn.Shape)
                 {
-                    Origin = new RvtXYZ(conn.Origin)
-                };
+                    case ConnectorProfileType.Round:
+                        model.Diameter = conn.Radius * 2;
+                        break;
+
+                    case ConnectorProfileType.Rectangular:
+                    case ConnectorProfileType.Oval:
+                        model.Width = conn.Width;
+                        model.Height = conn.Height;
+                        break;
+                }
 
                 // Tìm Id của phần tử đang được kết nối tới
                 if (conn.IsConnected)

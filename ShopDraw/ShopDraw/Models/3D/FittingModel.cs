@@ -1,4 +1,5 @@
 ﻿using Autodesk.Revit.DB;
+using System.Collections.Generic;
 
 namespace ShopDraw.Models._3D
 {
@@ -11,5 +12,7 @@ namespace ShopDraw.Models._3D
         public RvtXYZ BasisZ { get; set; }
         public string FamilyName { get; set; }
         public string TypeName { get; set; }
+        public string LevelName { get; set; }
+        public List<ConnectorModel> Connectors { get; set; }
     }
 }

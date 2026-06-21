@@ -71,6 +71,7 @@
     <Compile Include="Models\3D\ConnectorModel.cs" />
     <Compile Include="Models\3D\CurveModel.cs" />
     <Compile Include="Models\3D\FittingModel.cs" />
+    <Compile Include="Models\3D\LevelModel.cs" />
     <Compile Include="Models\3D\MepSystemModel.cs" />
     <Compile Include="Models\3D\RvtXYZ.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

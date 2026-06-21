@@ -1,10 +1,9 @@
 ﻿namespace ShopDraw.Models._3D
 {
-    internal class CurveModel
+    public class LevelModel
     {
         public string Id { get; set; }
-        public string FamilyName { get; set; }
-        public string TypeName { get; set; }
         public string LevelName { get; set; }
+        public double Elevation { get; set; }
     }
 }
