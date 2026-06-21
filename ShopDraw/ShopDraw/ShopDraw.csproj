@@ -64,6 +64,8 @@
     <Compile Include="Commands\CreateThreeDimCommand.cs" />
     <Compile Include="Commands\ExportMEPSystemCommand.cs" />
     <Compile Include="Commons\RevitBaseData.cs" />
+    <Compile Include="Commons\UnitConverter.cs" />
+    <Compile Include="Commons\WarningSwallower.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="MepZoneApplication.cs" />
     <Compile Include="Models\3D\ConnectorModel.cs" />
