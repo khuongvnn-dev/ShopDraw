@@ -427,8 +427,8 @@ namespace ShopDraw.Actions.Helpers
                         document.Regenerate();
 
                         // Chỉnh lại Offset chuẩn và xoay hướng 3D
-                        //SetFittingOffset(document, instance, offsetValue, trueOrigin);
-                        //AlignFittingOrientation(document, instance, fitting);
+                        SetFittingOffset(document, instance, offsetValue, trueOrigin);
+                        AlignFittingOrientation(document, instance, fitting);
 
                         // Lưu lại kết quả mapping ID
                         result[fitting.Id] = instance.Id;
@@ -449,6 +449,152 @@ namespace ShopDraw.Actions.Helpers
 
             return result;
         }
+
+        private static void AlignFittingOrientation(Document doc, FamilyInstance instance, FittingModel fitting)
+        {
+            if (instance == null || fitting == null) return;
+
+            LocationPoint loc = instance.Location as LocationPoint;
+            if (loc == null) return;
+            XYZ origin = loc.Point;
+
+            // 1. Lấy ma trận hướng mục tiêu chuẩn hóa từ JSON
+            if (fitting.BasisX == null || fitting.BasisY == null || fitting.BasisZ == null)
+            {
+                Logger.Infor($"[AlignOrientation] Fitting {fitting.Id} missing orientation Basis vectors. Skipping rotation.");
+                return;
+            }
+
+            XYZ targetX = fitting.BasisX.ToXYZ().Normalize();
+            XYZ targetY = fitting.BasisY.ToXYZ().Normalize();
+            XYZ targetZ = fitting.BasisZ.ToXYZ().Normalize();
+
+            // Lấy ma trận hướng hiện tại của phần tử trong Revit
+            Transform currentTrans = instance.GetTransform();
+            XYZ currentZ = currentTrans.BasisZ;
+
+            // ===============================================================
+            // BƯỚC 1: XOAY ĐỐI HƯỚNG TRỤC ĐỨNG (YAW / PITCH) - ALIGN TRỤC Z
+            // ===============================================================
+            double angleZ = currentZ.AngleTo(targetZ);
+
+            if (Math.Abs(angleZ) > 1e-4)
+            {
+                // Tính trục xoay bằng tích có hướng giữa vector hiện tại và vector mục tiêu
+                XYZ axisZ = currentZ.CrossProduct(targetZ);
+
+                // Xử lý trường hợp đặc biệt: góc xoay lệch đúng 180 độ (hai vector ngược chiều hoàn toàn)
+                if (axisZ.GetLength() < doc.Application.ShortCurveTolerance)
+                {
+                    if (Math.Abs(angleZ - Math.PI) < 1e-3)
+                    {
+                        // Chọn trục BasisX hiện tại làm tâm quay để lật úp/lật ngửa cấu kiện 180 độ
+                        axisZ = currentTrans.BasisX;
+                    }
+                }
+
+                if (axisZ.GetLength() > doc.Application.ShortCurveTolerance)
+                {
+                    Line rotationAxisLine = Line.CreateBound(origin, origin + axisZ.Normalize());
+                    ElementTransformUtils.RotateElement(doc, instance.Id, rotationAxisLine, angleZ);
+
+                    doc.Regenerate(); // Cập nhật lại trạng thái ma trận hình học mới
+                    currentTrans = instance.GetTransform(); // Lấy lại ma trận sau khi xoay trục Z
+                }
+            }
+
+            // ===============================================================
+            // BƯỚC 2: XOAY QUANH TRỤC TỰ THÂN (ROLL) - ALIGN TRỤC X & Y
+            // ===============================================================
+            // Trục xoay lúc này chính là trục Z mục tiêu (hoặc trục Z hiện tại đã được đồng bộ)
+            XYZ rotationAxisRoll = currentTrans.BasisZ;
+            XYZ currentX = currentTrans.BasisX;
+
+            // Tính góc xoay chính xác trên mặt phẳng vuông góc với trục Z
+            double angleRoll = AngleOnPlane(currentX, targetX, rotationAxisRoll);
+
+            if (Math.Abs(angleRoll) > 1e-4 && rotationAxisRoll.GetLength() > doc.Application.ShortCurveTolerance)
+            {
+                Line rollAxisLine = Line.CreateBound(origin, origin + rotationAxisRoll.Normalize());
+                ElementTransformUtils.RotateElement(doc, instance.Id, rollAxisLine, angleRoll);
+
+                doc.Regenerate();
+            }
+
+            // Ghi log kiểm tra độ chính xác sau khi hoàn thành xoay
+            Transform finalTrans = instance.GetTransform();
+            Logger.Infor($"[AlignOrientation] Fitting {fitting.Id} aligned. BasisX Diff: {finalTrans.BasisX.DistanceTo(targetX):F4}");
+        }
+
+        private static double AngleOnPlane(XYZ fromVec, XYZ toVec, XYZ normal)
+        {
+            double dot = fromVec.DotProduct(toVec);
+            // Giới hạn giá trị để tránh lỗi Math.Acos trả về NaN do sai số float
+            if (dot > 1) dot = 1;
+            if (dot < -1) dot = -1;
+
+            double angle = Math.Acos(dot);
+
+            // Sử dụng tích có hướng để xác định chiều quay (Xoay thuận hay ngược chiều kim đồng hồ)
+            XYZ cross = fromVec.CrossProduct(toVec);
+            if (cross.DotProduct(normal) < 0)
+            {
+                angle = -angle;
+            }
+            return angle;
+        }
+
+        private static void SetFittingOffset(Document doc, FamilyInstance instance, double offsetValue, XYZ trueOrigin)
+        {
+            if (instance == null) return;
+
+            bool positioned = false;
+
+            // 1. Dò tìm tham số Offset của cấu kiện (hỗ trợ cả ngôn ngữ Revit Anh và Việt)
+            Parameter paramOffset = instance.get_Parameter(BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM)
+                                    ?? instance.LookupParameter("Offset")
+                                    ?? instance.LookupParameter("Độ dịch chuyển");
+
+            // 2. Nếu tìm thấy tham số và tham số KHÔNG bị khóa (Read-Only)
+            if (paramOffset != null && !paramOffset.IsReadOnly)
+            {
+                try
+                {
+                    paramOffset.Set(offsetValue);
+                    doc.Regenerate(); // Tái tạo lại mô hình để cập nhật tọa độ mới
+                    positioned = true;
+                    Logger.Infor($"[SetOffset] Successfully set offset for fitting {instance.Id} to {offsetValue:F4} ft ({offsetValue * 304.8:F1} mm).");
+                }
+                catch (Exception ex)
+                {
+                    positioned = false;
+                    Logger.Infor($"[SetOffset] Failed to set parameter offset for fitting {instance.Id}, shifting to fallback method. Error: {ex.Message}");
+                }
+            }
+
+            // 3. CƠ CHẾ DỰ PHÒNG (FALLBACK): Nếu không có tham số hoặc gán parameter thất bại, dùng lệnh di chuyển đối tượng
+            if (!positioned)
+            {
+                Transform curTrans = instance.GetTransform();
+                XYZ delta = trueOrigin - curTrans.Origin; // Tính toán khoảng cách lệch thực tế
+
+                try
+                {
+                    // Chỉ dịch chuyển nếu khoảng cách lệch có độ dài lớn hơn 0
+                    if (!delta.IsZeroLength())
+                    {
+                        ElementTransformUtils.MoveElement(doc, instance.Id, delta);
+                        doc.Regenerate();
+                        Logger.Infor($"[SetOffset][Fallback] Successfully moved fitting {instance.Id} to true origin using MoveElement.");
+                    }
+                }
+                catch (Exception exMove)
+                {
+                    Logger.Fatal($"[SetOffset][CRITICAL] Both parameter offset and MoveElement failed for fitting {instance.Id}. Error: {exMove.Message}", false);
+                }
+            }
+        }
+
         internal static MepSystemModel GetData(ProgressBarView progressBar)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
@@ -475,6 +621,80 @@ namespace ShopDraw.Actions.Helpers
             if (model == null)
                 progressBar.Close();
             return model;
+        }
+        private static void ExportImportResultReport(MepSystemModel model,
+                                                     Dictionary<string, ElementId> createdFittings,
+                                                     Dictionary<string, ElementId> createdCurves)
+        {
+            var failureRows = new List<ImportFailureRow>();
+
+            // 1. Kiểm tra các Fitting bị thiếu/lỗi trong quá trình dựng
+            if (model.Fittings != null)
+            {
+                foreach (var fitting in model.Fittings)
+                {
+                    if (!createdFittings.ContainsKey(fitting.Id))
+                    {
+                        failureRows.Add(new ImportFailureRow
+                        {
+                            ElementType = "Fitting",
+                            JsonId = fitting.Id,
+                            FamilyName = fitting.FamilyName,
+                            TypeName = fitting.TypeName,
+                            LevelName = fitting.LevelName,
+                            Reason = "Failed to place FamilyInstance or internal geometry error."
+                        });
+                    }
+                }
+            }
+
+            // 2. Kiểm tra các Curve bị thiếu/lỗi trong quá trình dựng
+            if (model.Curves != null)
+            {
+                foreach (var curve in model.Curves)
+                {
+                    if (!createdCurves.ContainsKey(curve.Id))
+                    {
+                        failureRows.Add(new ImportFailureRow
+                        {
+                            ElementType = "Curve",
+                            JsonId = curve.Id,
+                            FamilyName = curve.FamilyName, // Category Name
+                            TypeName = curve.TypeName,
+                            LevelName = curve.LevelName,
+                            Reason = "Failed to create Pipe (e.g., endpoints too close or invalid PipeType)."
+                        });
+                    }
+                }
+            }
+
+            // 3. Đánh giá kết quả và xử lý thông báo/xuất báo cáo
+            int totalJsonElements = (model.Fittings?.Count ?? 0) + (model.Curves?.Count ?? 0);
+            int totalCreatedElements = createdFittings.Count + createdCurves.Count;
+
+            if (failureRows.Any())
+            {
+                // Gọi hàm CsvExporter linh hoạt của bạn
+                string reportPath = CsvExporter.ExportToCsv(failureRows, baseFileName: "import_failures_report");
+
+                Logger.Infor($"Import incomplete. Built {totalCreatedElements}/{totalJsonElements} elements. {failureRows.Count} elements failed. Report: {reportPath}");
+
+                TaskDialog.Show(
+                    "Import Completed with Errors",
+                    $"Successfully generated {totalCreatedElements} out of {totalJsonElements} elements.\n\n" +
+                    $"⚠️ {failureRows.Count} elements could not be created.\n" +
+                    $"A detailed failure report has been exported to:\n{reportPath}"
+                );
+            }
+            else
+            {
+                Logger.Infor($"Import fully successful! All {totalJsonElements} elements from JSON were generated in Revit.");
+
+                TaskDialog.Show(
+                    "Import Successful",
+                    $"Perfect match! All {totalJsonElements} elements (Fittings & Curves) have been successfully generated."
+                );
+            }
         }
     }
 }
