@@ -134,6 +134,7 @@ namespace ShopDraw.Actions.Helpers
                         FamilyName = element.Category?.Name, // Ống hệ thống không có FamilyName chuẩn như Fitting, ta dùng Category Name
                         LevelName = elementLevel?.Name // Gán thông tin LevelName
                     };
+                    ExtractCurveData(mepCurve, curveModel);
                     model.Curves.Add(curveModel);
                 }
                 else if (element is FamilyInstance fi)
@@ -151,8 +152,7 @@ namespace ShopDraw.Actions.Helpers
                         Origin = new RvtXYZ(transform.Origin),
                         BasisX = new RvtXYZ(transform.BasisX),
                         BasisY = new RvtXYZ(transform.BasisY),
-                        BasisZ = new RvtXYZ(transform.BasisZ),
-                        Connectors = GetConnectorsData(fi.MEPModel?.ConnectorManager, element.Id)
+                        BasisZ = new RvtXYZ(transform.BasisZ)
                     };
                     model.Fittings.Add(fittingModel);
                 }
@@ -160,46 +160,68 @@ namespace ShopDraw.Actions.Helpers
             model.Levels = uniqueLevels.Values.ToList();
             return model;
         }
-
-        private static List<ConnectorModel> GetConnectorsData(ConnectorManager cm, ElementId ownerId)
+        private static void ExtractCurveData(MEPCurve mepCurve, CurveModel curveModel)
         {
-            var result = new List<ConnectorModel>();
-            if (cm == null) return result;
+            if (mepCurve == null || curveModel == null) return;
 
-            foreach (Connector conn in cm.Connectors)
+            // 1. Trích xuất tọa độ điểm đầu và điểm cuối hình học tuyệt đối của ống
+            if (mepCurve.Location is LocationCurve locCurve && locCurve.Curve != null)
             {
-                var model = new ConnectorModel();
+                XYZ startPoint = locCurve.Curve.GetEndPoint(0);
+                XYZ endPoint = locCurve.Curve.GetEndPoint(1);
 
-                // Kiểm tra hình dáng của Connector để gán thông số kích thước phù hợp
-                switch (conn.Shape)
+                curveModel.StartPoint = new RvtXYZ(startPoint);
+                curveModel.EndPoint = new RvtXYZ(endPoint);
+
+                // 2. Trích xuất kích thước tự thân (Diameter hoặc Width/Height) an toàn
+                try { curveModel.Diameter = mepCurve.Diameter; } catch { }
+                try
                 {
-                    case ConnectorProfileType.Round:
-                        model.Diameter = conn.Radius * 2;
-                        break;
-
-                    case ConnectorProfileType.Rectangular:
-                    case ConnectorProfileType.Oval:
-                        model.Width = conn.Width;
-                        model.Height = conn.Height;
-                        break;
+                    curveModel.Width = mepCurve.Width;
+                    curveModel.Height = mepCurve.Height;
                 }
+                catch { }
 
-                // Tìm Id của phần tử đang được kết nối tới
-                if (conn.IsConnected)
+                // 3. Tìm kết nối ở 2 đầu ống để gán mối liên kết Đồ thị (Graph Connection)
+                ConnectorManager cm = mepCurve.ConnectorManager;
+                if (cm != null)
                 {
-                    foreach (Connector refConn in conn.AllRefs)
+                    foreach (Connector conn in cm.Connectors)
                     {
-                        if (refConn.Owner.Id != ownerId &&
-                           (refConn.ConnectorType == ConnectorType.End || refConn.ConnectorType == ConnectorType.Curve))
+                        // Chỉ xử lý các Connector ở đầu mút của ống (End)
+                        if (conn.ConnectorType == ConnectorType.End)
                         {
-                            model.ConnectorToId = refConn.Owner.Id.ToString();
-                            break;
+                            // Kiểm tra xem vị trí của Connector này đang khớp với điểm Start hay điểm End của ống
+                            bool isStart = conn.Origin.DistanceTo(startPoint) < 0.01;
+
+                            if (conn.IsConnected)
+                            {
+                                foreach (Connector refConn in conn.AllRefs)
+                                {
+                                    // Tìm đối tượng kết nối bên ngoài (không phải chính cái ống này)
+                                    if (refConn.Owner.Id != mepCurve.Id)
+                                    {
+                                        string targetId = refConn.Owner.Id.ToString();
+
+                                        // Kiểm tra xem đối tượng đó thuộc về cụm Assembly nào không (Giải pháp mở rộng hệ thống)
+                                        if (refConn.Owner.AssemblyInstanceId != ElementId.InvalidElementId)
+                                        {
+                                            targetId = $"{refConn.Owner.AssemblyInstanceId}.{refConn.Owner.Id}";
+                                        }
+
+                                        if (isStart)
+                                            curveModel.StartConnectedToId = targetId;
+                                        else
+                                            curveModel.EndConnectedToId = targetId;
+
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                result.Add(model);
             }
-            return result;
         }
     }
 }
