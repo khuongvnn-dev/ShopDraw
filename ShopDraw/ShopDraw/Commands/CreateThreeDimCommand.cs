@@ -1,6 +1,7 @@
 ﻿using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
+using ShopDraw.Actions;
 
 namespace ShopDraw.Commands
 {
@@ -9,7 +10,7 @@ namespace ShopDraw.Commands
     {
         public Result Execute(ExternalCommandData commandData, ref string message, ElementSet elements)
         {
-            TaskDialog.Show("Thông báo", "Lệnh tạo 3D đang chạy!");
+            new CreateThreeDimAction(commandData.Application.ActiveUIDocument).Execute();
             return Result.Succeeded;
         }
     }
