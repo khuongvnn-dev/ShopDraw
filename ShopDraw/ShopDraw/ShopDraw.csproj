@@ -76,6 +76,7 @@
     <Compile Include="Models\3D\LevelModel.cs" />
     <Compile Include="Models\3D\MepSystemModel.cs" />
     <Compile Include="Models\3D\RvtXYZ.cs" />
+    <Compile Include="Models\Reports\ImportFailureRow.cs" />
     <Compile Include="Models\Reports\MissingFittingReport.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">

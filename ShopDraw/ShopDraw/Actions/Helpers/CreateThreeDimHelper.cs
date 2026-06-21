@@ -36,6 +36,7 @@ namespace ShopDraw.Actions.Helpers
             var levelInfos = CreateLevels(document, model, progressBar);
             var createdFittings = PlaceFittings(document, model.Fittings, progressBar, cachedSymbols, levelInfos);
             var createdCurves = PlaceCurves(document, model.Curves, progressBar, levelInfos);
+            ExportImportResultReport(model, createdFittings, createdCurves);
         }
 
         private static Dictionary<string, ElementId> PlaceCurves(Document document,
