@@ -68,7 +68,6 @@
     <Compile Include="Commons\WarningSwallower.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="MepZoneApplication.cs" />
-    <Compile Include="Models\3D\ConnectorModel.cs" />
     <Compile Include="Models\3D\CurveModel.cs" />
     <Compile Include="Models\3D\FittingModel.cs" />
     <Compile Include="Models\3D\LevelModel.cs" />
