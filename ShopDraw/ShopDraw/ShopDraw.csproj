@@ -97,6 +97,8 @@
     <Content Include="Images\3d_32.png" />
     <Content Include="Images\document_16.png" />
     <Content Include="Images\document_32.png" />
+    <Content Include="Images\export_16.png" />
+    <Content Include="Images\export_32.png" />
   </ItemGroup>
   <ItemGroup>
     <None Include="MEP.addin" />
