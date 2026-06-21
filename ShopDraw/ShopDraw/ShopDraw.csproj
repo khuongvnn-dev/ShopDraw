@@ -63,6 +63,7 @@
     <Compile Include="Commands\CreateShopDrawCommand.cs" />
     <Compile Include="Commands\CreateThreeDimCommand.cs" />
     <Compile Include="Commands\ExportMEPSystemCommand.cs" />
+    <Compile Include="Commons\CsvExporter.cs" />
     <Compile Include="Commons\RevitBaseData.cs" />
     <Compile Include="Commons\UnitConverter.cs" />
     <Compile Include="Commons\WarningSwallower.cs" />
@@ -73,6 +74,7 @@
     <Compile Include="Models\3D\LevelModel.cs" />
     <Compile Include="Models\3D\MepSystemModel.cs" />
     <Compile Include="Models\3D\RvtXYZ.cs" />
+    <Compile Include="Models\Reports\MissingFittingReport.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
