@@ -36,8 +36,163 @@ namespace ShopDraw.Actions.Helpers
             var levelInfos = CreateLevels(document, model, progressBar);
             var createdFittings = PlaceFittings(document, model.Fittings, progressBar, cachedSymbols, levelInfos);
             var createdCurves = PlaceCurves(document, model.Curves, progressBar, levelInfos);
-            ExportImportResultReport(model, createdFittings, createdCurves);
+            //ExportImportResultReport(model, createdFittings, createdCurves);
+
+            MakeConnections(document, model.Curves, createdFittings, createdCurves, progressBar);
         }
+
+        #region Connections
+
+        private static void MakeConnections(Document doc, List<CurveModel> curves, Dictionary<string, ElementId> fittingMap, Dictionary<string, ElementId> curveMap, ProgressBarView progressBar)
+        {
+            Logger.CurrentMethod();
+            if (curves == null || curves.Count == 0) return;
+
+            int batchSize = 50;
+            int totalBatch = (curves.Count + batchSize - 1) / batchSize;
+
+            for (int i = 0; i < curves.Count; i += batchSize)
+            {
+                progressBar?.UpdateNumber2((i / batchSize) + 1, totalBatch, "Creating connections...", true);
+                RecursiveConnect(doc, curves.Skip(i).Take(batchSize).ToList(), fittingMap, curveMap);
+            }
+
+            Logger.Infor("Finished MakeConnections process.");
+        }
+
+        private static void RecursiveConnect(Document doc, List<CurveModel> batch, Dictionary<string, ElementId> fittingMap, Dictionary<string, ElementId> curveMap)
+        {
+            if (batch.Count == 0) return;
+
+            using (SubTransaction sub = new SubTransaction(doc))
+            {
+                try
+                {
+                    sub.Start();
+                    foreach (var curve in batch)
+                    {
+                        if (curveMap.TryGetValue(curve.Id, out ElementId pipeId))
+                        {
+                            ConnectCurveEnds(doc, doc.GetElement(pipeId) as MEPCurve, curve, fittingMap);
+                        }
+                    }
+                    sub.Commit();
+                }
+                catch (Exception ex)
+                {
+                    if (sub.HasStarted() && sub.GetStatus() == TransactionStatus.Started) sub.RollBack();
+                    Logger.Fatal($"RecursiveConnect error: {ex.Message}", false);
+
+                    if (batch.Count == 1)
+                    {
+                        Logger.Infor($"CRITICAL: Curve {batch[0].Id} caused connection failure! Skipped.");
+                        return;
+                    }
+
+                    // Cơ chế tự động cô lập lỗi
+                    int mid = batch.Count / 2;
+                    RecursiveConnect(doc, batch.GetRange(0, mid), fittingMap, curveMap);
+                    RecursiveConnect(doc, batch.GetRange(mid, batch.Count - mid), fittingMap, curveMap);
+                }
+            }
+        }
+
+        private static void ConnectCurveEnds(Document doc, MEPCurve pipe, CurveModel model, Dictionary<string, ElementId> fittingMap)
+        {
+            if (pipe == null || pipe.ConnectorManager == null) return;
+
+            // Phân biệt đầu Start và End của ống dựa vào JSON.
+            // Lưu ý: Vẫn phải dùng hàm GetPipeConnectorByOrigin ở đây vì ống có 2 đầu, 
+            // ta cần biết chính xác đầu nào là Start, đầu nào là End để gọi đúng ID.
+            Connector startConn = GetPipeConnectorByOrigin(pipe.ConnectorManager, model.StartPoint.ToXYZ());
+            Connector endConn = GetPipeConnectorByOrigin(pipe.ConnectorManager, model.EndPoint.ToXYZ());
+
+            if (startConn != null && !string.IsNullOrEmpty(model.StartConnectedToId))
+                ExecuteSingleConnection(doc, startConn, model.StartConnectedToId, fittingMap, model.Id);
+
+            if (endConn != null && !string.IsNullOrEmpty(model.EndConnectedToId))
+                ExecuteSingleConnection(doc, endConn, model.EndConnectedToId, fittingMap, model.Id);
+        }
+
+        private static void ExecuteSingleConnection(Document doc, Connector pipeConn, string targetId, Dictionary<string, ElementId> fittingMap, string curveJsonId)
+        {
+            // Cắt ID nếu là Assembly (VD: "9988.1234" -> "1234")
+            string realTargetId = targetId.Contains(".") ? targetId.Split('.')[1] : targetId;
+
+            if (!fittingMap.TryGetValue(realTargetId, out ElementId fitId)) return;
+
+            FamilyInstance fitting = doc.GetElement(fitId) as FamilyInstance;
+            if (fitting?.MEPModel?.ConnectorManager == null) return;
+
+            // Tìm Connector phù hợp trên Fitting (Chỉ dùng Tích vô hướng)
+            Connector fitConn = GetCompatibleFittingConnector(fitting.MEPModel.ConnectorManager, pipeConn);
+
+            if (fitConn != null && !pipeConn.IsConnected && !fitConn.IsConnected)
+            {
+                try
+                {
+                    if (Math.Abs(pipeConn.Radius - fitConn.Radius) > 0.003)
+                    {
+                        doc.Create.NewTransitionFitting(pipeConn, fitConn);
+                    }
+                    else
+                    {
+                        pipeConn.ConnectTo(fitConn);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Fatal($"Connection failed {curveJsonId} -> {fitId}: {ex.Message}", false);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Tìm connector của Fitting dựa trên độ đối nghịch của Vector (Dot Product).
+        /// Bỏ qua hoàn toàn việc tính toán khoảng cách để tối ưu hiệu năng.
+        /// </summary>
+        private static Connector GetCompatibleFittingConnector(ConnectorManager cm, Connector curveConnector)
+        {
+            XYZ targetZ = curveConnector.CoordinateSystem.BasisZ.Normalize();
+            Connector bestMatch = null;
+            double bestDot = double.MaxValue;
+
+            foreach (Connector connector in cm.Connectors)
+            {
+                if (connector.IsConnected) continue;
+
+                double dot = connector.CoordinateSystem.BasisZ.Normalize().DotProduct(targetZ);
+                if (dot < bestDot)
+                {
+                    bestDot = dot;
+                    bestMatch = connector;
+                }
+            }
+
+            // Trả về connector có hướng ngược chiều nhất với ống (dot < 0)
+            return bestDot < 0 ? bestMatch : null;
+        }
+
+        /// <summary>
+        /// Chỉ dùng để phân biệt Connector Start và Connector End của bản thân ống MEPCurve.
+        /// </summary>
+        private static Connector GetPipeConnectorByOrigin(ConnectorManager cm, XYZ targetOrigin)
+        {
+            Connector bestFit = null;
+            double minDist = double.MaxValue;
+            foreach (Connector c in cm.Connectors)
+            {
+                double d = c.Origin.DistanceTo(targetOrigin);
+                if (d < minDist)
+                {
+                    minDist = d;
+                    bestFit = c;
+                }
+            }
+            return minDist < 0.1 ? bestFit : null;
+        }
+
+        #endregion
 
         private static Dictionary<string, ElementId> PlaceCurves(Document document,
                                                                  List<CurveModel> curves,
