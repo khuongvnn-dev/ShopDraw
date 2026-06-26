@@ -3,6 +3,7 @@ using Autodesk.Revit.DB.Plumbing;
 using Autodesk.Revit.UI;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using ShopDraw.Commons;
 using ShopDraw.Models._3D;
 using ShopDraw.Views;
 using System;
@@ -41,7 +42,7 @@ namespace ShopDraw.Actions.Helpers
             if (data == null || (data.Curves.Count == 0 && data.Fittings.Count == 0))
             {
                 Logger.Infor("No MEP system data found to export.");
-                TaskDialog.Show("Notification", "No MEP system data found to export!");
+                TaskDialogUtil.ShowInfo( "No MEP system data found to export!");
                 return;
             }
 
@@ -81,13 +82,13 @@ namespace ShopDraw.Actions.Helpers
 
                     // Ghi log và hiển thị thông báo kết quả
                     Logger.Infor($"Export completed successfully! The drawing includes - Curves: {data.Curves.Count}, Fittings: {data.Fittings.Count}");
-                    TaskDialog.Show("Notification", "Export completed successfully!");
+                    TaskDialogUtil.ShowInfo( "Export completed successfully!");
                 }
                 catch (Exception ex)
                 {
                     // Ghi log lỗi nếu quá trình ghi file thất bại
                     Logger.Fatal(ex.Message);
-                    TaskDialog.Show("Error", "An error occurred while exporting and saving the JSON file!");
+                    TaskDialogUtil.ShowError("An error occurred while exporting and saving the JSON file!");
                 }
             }
         }

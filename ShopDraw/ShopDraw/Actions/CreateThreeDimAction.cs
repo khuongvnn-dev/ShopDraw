@@ -30,7 +30,7 @@ namespace ShopDraw.Actions
             if (model == null)
             {
                 _progressBar.Close();
-                TaskDialog.Show("Error", "Failed to retrieve data for 3D model creation.");
+                TaskDialogUtil.ShowError("Failed to retrieve data for 3D model creation.");
                 return;
             }
 
@@ -51,7 +51,7 @@ namespace ShopDraw.Actions
                 catch (Exception ex)
                 {
                     create3dTrans.RollBack();
-                    TaskDialog.Show("Error", $"An error occurred while creating the 3D model: {ex.Message}");
+                    TaskDialogUtil.ShowError($"An error occurred while creating the 3D model: {ex.Message}");
                 }
                 finally
                 {
