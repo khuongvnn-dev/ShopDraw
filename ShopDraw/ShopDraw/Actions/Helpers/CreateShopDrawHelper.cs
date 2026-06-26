@@ -29,7 +29,36 @@ namespace ShopDraw.Actions.Helpers
 
             #region validate csv data
             var validate = ValidateCsv(doc, data, existingSheetNumber, existingViewTemplate, existingLevel, progressBar);
+            string errorDetails = string.Join("\n", validate.Errors);
+            string warningDetails = string.Join("\n", validate.Warnings);
+            if (!validate.IsValid)
+            {
+                TaskDialogUtil.ShowError(
+                    mainInstruction: "Critical errors detected. Execution stopped.",
+                    mainContent: "Please fix the conflicts in your CSV file before running again.",
+                    expandedContent: $"Error Log:\n{errorDetails}"
+                );
+                Logger.Fatal($"CSV Validation Failed. Execution stopped. Details:\n{errorDetails}", false);
+                return;
+            }
+            if (validate.Warnings.Count > 0)
+            {
+                Logger.Infor($"CSV Validation Warnings detected:\n{warningDetails}");
+                bool userAccepts = TaskDialogUtil.AskConfirm(
+                    mainInstruction: "Non-critical conflicts detected in your CSV data.",
+                    mainContent: "Do you want to proceed with the execution despite these warnings?",
+                    expandedContent: $"Warning Log:\n{warningDetails}"
+                );
 
+                if (!userAccepts)
+                {
+                    Logger.Infor("Execution cancelled by user after warning dialog.");
+                    return; // Dừng chương trình vì user chọn "No"
+                }
+                Logger.Infor("User accepted warnings. Proceeding with execution.");
+            }
+            else Logger.Infor("CSV Validation passed successfully with 0 errors and 0 warnings.");
+            #endregion
 
         }
 
