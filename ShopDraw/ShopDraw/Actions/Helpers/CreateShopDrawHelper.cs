@@ -2,6 +2,7 @@
 using CsvHelper;
 using CsvHelper.Configuration;
 using Microsoft.Win32;
+using ShopDraw.Commons;
 using ShopDraw.Models.Reports;
 using ShopDraw.Models.Shop;
 using ShopDraw.Views;
@@ -22,6 +23,11 @@ namespace ShopDraw.Actions.Helpers
             var existingViewTemplate = CollectExistingViewTemplates(doc);
             var existingLevel = CollectExistingLevels(doc);
 
+#if DEBUG
+            DebugTools.LogDebugInfo(existingSheetNumber, existingViewName, existingViewTemplate, existingLevel);
+#endif
+
+            #region validate csv data
             var validate = ValidateCsv(doc, data, existingSheetNumber, existingViewTemplate, existingLevel, progressBar);
 
 

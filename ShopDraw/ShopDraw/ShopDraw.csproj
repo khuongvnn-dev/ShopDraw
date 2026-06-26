@@ -93,6 +93,7 @@
     <Compile Include="Commands\CreateThreeDimCommand.cs" />
     <Compile Include="Commands\ExportMEPSystemCommand.cs" />
     <Compile Include="Commons\CsvExporter.cs" />
+    <Compile Include="Commons\DebugTools.cs" />
     <Compile Include="Commons\TaskDialogUtil.cs" />
     <Compile Include="Commons\RevitBaseData.cs" />
     <Compile Include="Commons\UnitConverter.cs" />
